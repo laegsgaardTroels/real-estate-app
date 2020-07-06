@@ -3,8 +3,9 @@ PYTHON_INTERPRETER = python3
 
 ## Serve the changeover labeller as a Bokeh app
 .DEFAULT_GOAL := app
-app:
-	${PYTHON_INTERPRETER} -m bokeh serve real_estate_app/app.py --show
+app: .venv/bin/activate
+	. .venv/bin/activate; \
+		${PYTHON_INTERPRETER} -m bokeh serve real_estate_app/app.py --show
 
 .venv/bin/activate: requirements.txt
 	rm -rf .venv
