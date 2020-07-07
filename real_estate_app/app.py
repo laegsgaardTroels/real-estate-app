@@ -1,35 +1,16 @@
+from real_estate_app import Map
+from real_estate_app import config
+
 from real_estate_model import ModelPipeline
 
 from bokeh.io import curdoc
-from bokeh.plotting import figure
-from bokeh.tile_providers import CARTODBPOSITRON_RETINA
-from bokeh.tile_providers import get_provider
 from bokeh.layouts import row
 from bokeh.layouts import column
 
 from bokeh.models.widgets.markups import Div
 from bokeh.models import Select
-from bokeh.models import TextInput
 
 import requests
-
-import pandas as pd
-
-import math
-
-
-def merc(lat, lon):
-    r_major = 6378137.000
-    x = r_major * math.radians(lon)
-    scale = x/lon
-    y = (
-        180.0 / math.pi * math.log(
-            math.tan(
-                 math.pi / 4.0 + lat * (math.pi / 180.0) / 2.0
-            )
-        ) * scale
-    )
-    return (x, y)
 
 
 class RealEstateApp:
@@ -42,22 +23,24 @@ class RealEstateApp:
 
         self.zipcodes = ['8000', '8200', '8210', '8230']
 
-        self.latitude_min = 56.13
-        self.latitude_max = 56.18
-        self.longitude_min = 10.18
-        self.longitude_max = 10.26
-
         self.selected_zipcode = None
         self.selected_road = None
         self.selected_address = None
         self.selected_prediction = None
 
+        self.map = Map(
+            latitude_min=config.AARHUS_LATITUDE_MIN,
+            latitude_max=config.AARHUS_LATITUDE_MAX,
+            longitude_min=config.AARHUS_LONGITUDE_MIN,
+            longitude_max=config.AARHUS_LONGITUDE_MAX,
+        )
+
         # Startup.
         self.layout = row(
             children=[],
-            sizing_mode="fixed",
-            width=1000,
+            width=config.WIDTH,
         )
+        self.map.refresh_plots()
         self.refresh_plots()
 
     def refresh_plots(self):
@@ -86,6 +69,7 @@ class RealEstateApp:
             )
             search.children.append(road)
             if self.selected_road is not None:
+
                 address = Select(
                     title="Addresse:",
                     value=self.selected_address,
@@ -108,21 +92,9 @@ class RealEstateApp:
                     )
                     search.children.append(predicted_price)
 
-        # Range bounds supplied in web mercator coordinates.
-        range0 = merc(self.latitude_min, self.longitude_min)
-        range1 = merc(self.latitude_max, self.longitude_max)
-        aarhus_map = figure(
-            x_range=(range0[0], range1[0]),
-            y_range=(range0[1], range1[1]),
-            x_axis_type="mercator",
-            y_axis_type="mercator",
-        )
-        tile_provider = get_provider(CARTODBPOSITRON_RETINA)
-        aarhus_map.add_tile(tile_provider)
-        aarhus_map.toolbar.logo = None
         self.layout.children = [
             search,
-            aarhus_map,
+            self.map.layout,
         ]
 
     def zipcode_handler(self, attr, old, new):
@@ -147,30 +119,39 @@ class RealEstateApp:
         self.refresh_plots()
 
     def get_addresses(self):
+        self.addresses_response = requests.get(
+            'https://dawa.aws.dk/adresser',
+            params={
+                'navngivenvej_id': self.roads[self.selected_road]['id'],
+            }
+        ).json()
         self.addresses = dict(map(
             lambda response: (response['adressebetegnelse'], response),
-            requests.get(
-                'https://dawa.aws.dk/adresser',
-                params={
-                    'navngivenvej_id': self.roads[self.selected_road]['id'],
-                }
-            ).json(),
+            self.addresses_response,
         ))
 
+        self.map.set_bbox(*self.roads[self.selected_road]['bbox'])
+        self.map.set_address_source_data(self.addresses_response)
+        self.map.refresh_plots()
+
     def get_roads(self):
+        self.road_response = requests.get(
+            'https://dawa.aws.dk/navngivneveje',
+            params={
+                'postnr': self.selected_zipcode,
+            }
+        ).json()
         self.roads = dict(map(
             lambda response: (response['navn'], response),
-            requests.get(
-                'https://dawa.aws.dk/navngivneveje',
-                params={
-                    'postnr': self.selected_zipcode,
-                }
-            ).json(),
+            self.road_response,
         ))
 
     def predict(self, addressid=None) -> float:
         if addressid is None:
             addressid = self.addresses[self.selected_address]['id']
+            longitude, latitude = (
+                self.addresses[self.selected_address]['adgangsadresse']['adgangspunkt']['koordinater']
+            )
 
         bbr_response = requests.get(
             'https://dawa.aws.dk/bbrlight/enheder',
@@ -184,8 +165,8 @@ class RealEstateApp:
                 'rooms': bbr['VAERELSE_ANT'],
                 'size': bbr['BEBO_ARL'],
                 'build_year': bbr['BEBO_ARL'],
-                'latitude':  10,
-                'longitude': 50,
+                'latitude':  latitude,
+                'longitude': longitude,
             }))
 
 
