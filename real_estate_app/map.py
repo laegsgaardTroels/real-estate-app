@@ -35,7 +35,7 @@ class Map:
 
         self.address_source = ColumnDataSource()
         self.address_source.data = pd.DataFrame(
-            columns=['x', 'y', 'adressebetegnelse']
+            columns=['x', 'y', 'adressebetegnelse', 'prediction']
         )
 
         # Startup.
@@ -60,7 +60,10 @@ class Map:
             y_range=self.y_range,
             x_axis_type="mercator",
             y_axis_type="mercator",
-            tooltips=[("Address", "@adressebetegnelse")]
+            tooltips=[
+                ("Address", "@adressebetegnelse"),
+                ("Prediction", "@prediction"),
+            ],
         )
         self.aarhus_map.add_tile(self.tile_provider)
         self.aarhus_map.circle(
@@ -87,6 +90,7 @@ class Map:
             )
             new_row = dict(zip(('x', 'y'), merc(latitude, longitude)))
             new_row['adressebetegnelse'] = response['adressebetegnelse']
+            new_row['prediction'] = round(response['prediction'] / 1e6, 1)
             rows.append(new_row)
         self.address_source.data = pd.DataFrame(rows)
 

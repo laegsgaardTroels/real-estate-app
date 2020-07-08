@@ -80,9 +80,12 @@ class RealEstateApp:
                     self.address_handler,
                 )
                 search.children.append(address)
-                if self.selected_prediction is not None:
+                if self.selected_address is not None:
+                    prediction = (
+                        self.addresses[self.selected_address]['prediction']
+                    )
                     formatted_price = (
-                        f'{round(self.selected_prediction):,}'
+                        f'{round(prediction):,}'
                         .format(',', '.')
                     )
                     predicted_price = Div(
@@ -114,7 +117,6 @@ class RealEstateApp:
 
     def address_handler(self, attr, old, new):
         self.selected_address = new
-        self.selected_prediction = self.predict()
         print(self.selected_prediction)
         self.refresh_plots()
 
@@ -125,11 +127,11 @@ class RealEstateApp:
                 'navngivenvej_id': self.roads[self.selected_road]['id'],
             }
         ).json()
+        self.predict()
         self.addresses = dict(map(
             lambda response: (response['adressebetegnelse'], response),
             self.addresses_response,
         ))
-
         self.map.set_bbox(*self.roads[self.selected_road]['bbox'])
         self.map.set_address_source_data(self.addresses_response)
         self.map.refresh_plots()
@@ -146,28 +148,33 @@ class RealEstateApp:
             self.road_response,
         ))
 
-    def predict(self, addressid=None) -> float:
-        if addressid is None:
-            addressid = self.addresses[self.selected_address]['id']
+    def predict(self):
+        for idx, address_response in enumerate(self.addresses_response):
             longitude, latitude = (
-                self.addresses[self.selected_address]['adgangsadresse']['adgangspunkt']['koordinater']
+                address_response['adgangsadresse']['adgangspunkt']['koordinater']
             )
-
-        bbr_response = requests.get(
-            'https://dawa.aws.dk/bbrlight/enheder',
-            params={
-                'adresseid': addressid,
-            }
-        )
-        if bbr_response.status_code == 200:
-            bbr = bbr_response.json()[0]
-            return float(self.model.predict({
-                'rooms': bbr['VAERELSE_ANT'],
-                'size': bbr['BEBO_ARL'],
-                'build_year': bbr['BEBO_ARL'],
-                'latitude':  latitude,
-                'longitude': longitude,
-            }))
+            bbr_response = requests.get(
+                'https://dawa.aws.dk/bbrlight/enheder',
+                params={
+                    'adresseid': address_response['id'],
+                }
+            )
+            if bbr_response.status_code == 200:
+                try:
+                    bbr = bbr_response.json()[0]
+                    self.addresses_response[idx]['prediction'] = float(
+                        self.model.predict({
+                            'rooms': bbr['VAERELSE_ANT'],
+                            'size': bbr['BEBO_ARL'],
+                            'build_year': bbr['BEBO_ARL'],
+                            'latitude':  latitude,
+                            'longitude': longitude,
+                        })
+                    )
+                except:
+                    self.addresses_response[idx]['prediction'] = -1
+            else:
+                self.addresses_response[idx]['prediction'] = -1
 
 
 planning_tool = RealEstateApp()
