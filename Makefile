@@ -15,7 +15,6 @@ app: .venv/bin/activate
 	virtualenv --python ${PYTHON_INTERPRETER} .venv
 	. .venv/bin/activate; \
 		${PYTHON_INTERPRETER} -m pip install -r requirements.txt; \
-		${PYTHON_INTERPRETER} -m pip install -e .; \
 		ipython kernel install --user --name=real-estate-app; \
 
 ## Run tests.
